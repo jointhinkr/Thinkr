@@ -13,6 +13,9 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
   const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [other, setOther] = useState<Pick<Profile, "id" | "username" | "display_name"> | null>(null);
+  const [isGroup, setIsGroup] = useState(false);
+  const [title, setTitle] = useState<string | null>(null);
+  const [names, setNames] = useState<Record<string, string>>({});
   const [userId, setUserId] = useState<string | null>(null);
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
@@ -45,12 +48,21 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
       if (!active) return;
       setUserId(user.id);
 
+      const { data: conv } = await supabase.from("conversations").select("is_group, title").eq("id", id).single();
+      if (active) { setIsGroup(!!conv?.is_group); setTitle(conv?.title ?? null); }
+
       const { data: members } = await supabase
         .from("conversation_members")
         .select("user_id, user:profiles!conversation_members_user_id_fkey(id, username, display_name)")
         .eq("conversation_id", id);
 
       if (!members || members.length === 0) { router.push("/echo"); return; }
+      const nm: Record<string, string> = {};
+      (members as Array<{ user_id: string; user: unknown }>).forEach((m) => {
+        const u = m.user as { username: string; display_name: string | null };
+        nm[m.user_id] = u.display_name || u.username;
+      });
+      if (active) setNames(nm);
       const o = members.find((m: { user_id: string }) => m.user_id !== user.id) as { user: unknown } | undefined;
       setOther((o?.user as Pick<Profile, "id" | "username" | "display_name">) ?? null);
 
@@ -87,7 +99,7 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
     setSending(false);
   }
 
-  const name = other ? (other.display_name || other.username) : "";
+  const name = isGroup ? (title || "Circle chat") : (other ? (other.display_name || other.username) : "");
 
   return (
     <div className="-mt-2">
@@ -97,7 +109,16 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
         <Link href="/echo" aria-label="Back" className="w-8 h-8 grid place-items-center rounded-full -ml-1" style={{ color: "var(--ink-60)" }}>
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
         </Link>
-        {other && (
+        {isGroup ? (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-full grid place-items-center text-white font-bold shrink-0"
+              style={{ background: "linear-gradient(135deg, var(--amber), var(--flame))" }}>◎</div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold truncate" style={{ color: "var(--ink-1)" }}>{name}</div>
+              <div className="font-label" style={{ fontSize: "9px", color: "var(--ink-40)" }}>group · {Object.keys(names).length} members</div>
+            </div>
+          </div>
+        ) : other ? (
           <Link href={`/profile/${other.username}`} className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-full grid place-items-center text-white font-bold shrink-0"
               style={{ background: "linear-gradient(135deg, var(--flame), var(--amber))" }}>
@@ -108,7 +129,7 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
               <div className="font-label" style={{ fontSize: "9px", color: "var(--ink-40)" }}>bonded · @{other.username}</div>
             </div>
           </Link>
-        )}
+        ) : null}
       </div>
 
       {/* messages */}
@@ -124,7 +145,10 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
         {messages.map((m) => {
           const mine = m.sender_id === userId;
           return (
-            <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+            <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+              {isGroup && !mine && (
+                <span className="font-label mb-0.5 ml-1" style={{ fontSize: "9px", color: "var(--ink-40)" }}>{names[m.sender_id] || "someone"}</span>
+              )}
               <div className="max-w-[78%] px-3.5 py-2.5 text-sm leading-relaxed animate-fade"
                 style={mine
                   ? { background: "linear-gradient(135deg, var(--flame), var(--flame-deep))", color: "#fff", borderRadius: "18px 18px 5px 18px", boxShadow: "var(--shadow-sm)" }

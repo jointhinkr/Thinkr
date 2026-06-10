@@ -297,6 +297,13 @@ export default function Flux() {
         ))}
       </div>
 
+      {/* Ignite live entry */}
+      <Link href="/ignite" className="fixed left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full glass active:scale-95 transition-transform"
+        style={{ top: "62px", border: "1px solid var(--line-2)", boxShadow: "var(--shadow-sm)" }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--flame)", animation: "pulse-dot 1.4s infinite" }} />
+        <span className="font-label" style={{ fontSize: "10px", letterSpacing: "0.08em", color: "var(--flame)" }}>IGNITE · LIVE</span>
+      </Link>
+
       {/* position rail */}
       <div className="fixed right-2 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-1.5 pointer-events-none">
         {thoughts.slice(0, Math.min(thoughts.length, 8)).map((_, i) => (

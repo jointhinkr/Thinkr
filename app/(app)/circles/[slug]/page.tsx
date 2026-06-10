@@ -103,6 +103,13 @@ export default function CirclePage({ params }: { params: Promise<{ slug: string 
     }
   }
 
+  async function openChat() {
+    if (!circle) return;
+    const supabase = createClient();
+    const { data } = await supabase.rpc("open_circle_conversation", { circle: circle.id });
+    if (data) router.push(`/echo/${data}`);
+  }
+
   if (loading) {
     return <div className="text-center py-20 opacity-30 text-sm">Loading…</div>;
   }
@@ -141,6 +148,17 @@ export default function CirclePage({ params }: { params: Promise<{ slug: string 
           {isMember ? "joined ✓" : "join"}
         </button>
       </div>
+
+      {isMember && (
+        <button onClick={openChat}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white active:scale-[0.99] transition-transform"
+          style={{ background: "linear-gradient(135deg, var(--flame), var(--flame-deep))" }}>
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 11.5a8.4 8.4 0 0 1-11.6 7.8L4 20.5l1.3-4A8.4 8.4 0 1 1 21 11.5Z" />
+          </svg>
+          Open circle chat
+        </button>
+      )}
 
       {isMember && (
         <>

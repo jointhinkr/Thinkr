@@ -12,7 +12,10 @@ type Req = {
 };
 type Conv = {
   id: string;
-  other: Pick<Profile, "id" | "username" | "display_name">;
+  isGroup: boolean;
+  title: string | null;
+  memberCount: number;
+  other: Pick<Profile, "id" | "username" | "display_name"> | null;
   last: string | null;
   lastAt: string | null;
   fromMe: boolean;
@@ -54,28 +57,40 @@ export default function EchoPage() {
 
     if (ids.length === 0) { setConvs([]); setLoading(false); return; }
 
+    const { data: convRows } = await supabase.from("conversations").select("id, is_group, title").in("id", ids);
+    const meta: Record<string, { is_group: boolean; title: string | null }> = {};
+    (convRows ?? []).forEach((c: { id: string; is_group: boolean; title: string | null }) => { meta[c.id] = { is_group: c.is_group, title: c.title }; });
+
     const { data: others } = await supabase
       .from("conversation_members")
       .select("conversation_id, user:profiles!conversation_members_user_id_fkey(id, username, display_name)")
       .in("conversation_id", ids)
       .neq("user_id", user.id);
+    const othersByConv: Record<string, Pick<Profile, "id" | "username" | "display_name">[]> = {};
+    ((others ?? []) as unknown as Array<{ conversation_id: string; user: Pick<Profile, "id" | "username" | "display_name"> }>).forEach((o) => {
+      (othersByConv[o.conversation_id] ??= []).push(o.user);
+    });
 
     const { data: msgs } = await supabase
       .from("messages")
       .select("conversation_id, body, created_at, sender_id")
       .in("conversation_id", ids)
       .order("created_at", { ascending: false });
-
     const lastByConv: Record<string, { body: string; created_at: string; sender_id: string }> = {};
     (msgs ?? []).forEach((m: { conversation_id: string; body: string; created_at: string; sender_id: string }) => {
       if (!lastByConv[m.conversation_id]) lastByConv[m.conversation_id] = m;
     });
 
-    const list: Conv[] = ((others ?? []) as unknown as Array<{ conversation_id: string; user: Pick<Profile, "id" | "username" | "display_name"> }>).map((o) => {
-      const last = lastByConv[o.conversation_id];
+    const list: Conv[] = ids.map((cid) => {
+      const m = meta[cid] ?? { is_group: false, title: null };
+      const mems = othersByConv[cid] ?? [];
+      const last = lastByConv[cid];
       return {
-        id: o.conversation_id,
-        other: o.user,
+        id: cid,
+        isGroup: m.is_group,
+        title: m.title,
+        memberCount: mems.length + 1,
+        other: m.is_group ? null : (mems[0] ?? null),
         last: last?.body ?? null,
         lastAt: last?.created_at ?? null,
         fromMe: last?.sender_id === user.id,
@@ -107,6 +122,18 @@ export default function EchoPage() {
           Connections form when both minds say yes. Then you talk.
         </p>
       </div>
+
+      <Link href="/gather" className="flex items-center justify-between rounded-2xl p-4 active:scale-[0.99] transition-transform"
+        style={{ background: "linear-gradient(135deg, rgba(247,178,76,0.18), rgba(244,74,38,0.08))", border: "1px solid var(--line)" }}>
+        <div className="flex items-center gap-3">
+          <span className="text-xl">🌿</span>
+          <div>
+            <div className="text-sm font-semibold" style={{ color: "var(--ink-1)" }}>Gather</div>
+            <div className="text-xs" style={{ color: "var(--ink-60)" }}>Meet your people in real life</div>
+          </div>
+        </div>
+        <span style={{ color: "var(--flame)" }}>→</span>
+      </Link>
 
       {requests.length > 0 && (
         <div className="space-y-2.5">
@@ -161,18 +188,21 @@ export default function EchoPage() {
         )}
 
         {convs.map((c) => {
-          const name = c.other.display_name || c.other.username;
+          const name = c.isGroup ? (c.title || "Circle chat") : (c.other ? (c.other.display_name || c.other.username) : "Conversation");
           return (
             <Link key={c.id} href={`/echo/${c.id}`}
               className="flex items-center gap-3 p-3 rounded-2xl transition-colors"
               style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
               <div className="w-12 h-12 rounded-full grid place-items-center text-white font-bold shrink-0"
-                style={{ background: "linear-gradient(135deg, var(--flame), var(--amber))" }}>
-                {name.charAt(0).toUpperCase()}
+                style={{ background: c.isGroup ? "linear-gradient(135deg, var(--amber), var(--flame))" : "linear-gradient(135deg, var(--flame), var(--amber))" }}>
+                {c.isGroup ? "◎" : name.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold truncate" style={{ color: "var(--ink-1)" }}>{name}</span>
+                  <span className="text-sm font-semibold truncate" style={{ color: "var(--ink-1)" }}>
+                    {name}
+                    {c.isGroup && <span className="ml-1.5 font-label" style={{ fontSize: "9px", color: "var(--ink-40)" }}>GROUP · {c.memberCount}</span>}
+                  </span>
                   {c.lastAt && <span className="font-label shrink-0" style={{ fontSize: "10px", color: "var(--ink-40)" }}>{timeAgo(c.lastAt)}</span>}
                 </div>
                 <div className="text-xs truncate mt-0.5" style={{ color: "var(--ink-60)" }}>

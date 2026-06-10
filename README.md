@@ -16,10 +16,12 @@ A connection-first social platform. People find each other by **how they think**
 - **Login intro** — swipeable carousel explaining the app (with the cited Surgeon General study)
 - **Onboarding survey** — the "thinking fingerprint" questionnaire + match preferences (gender, age, location, politics) → feeds the matching algorithm
 - **18+ age gate** + Terms acceptance after login
-- **Flux** — full-screen, swipe-snapping reel of thoughts (Ignite live rooms reserved for inside Flux)
+- **Flux** — full-screen, swipe-snapping reel of thoughts
+- **Ignite** — live realtime discussion rooms (debate / study / chill / open floor), reached from inside Flux
 - **Daily Spark** — one shared prompt a day
 - **Thought Twin** — cosine-similarity matching, gated by your survey preferences; request → both approve → a bond
-- **Echo** — real-time DMs between bonded users
+- **Echo** — real-time DMs between bonded users, plus **circle group chats**
+- **Gather** — real-world meetups with RSVPs (reached from inside Echo)
 - **Circles** — topic communities with their own feeds
 - **Resonance** — private signal that replaces likes. No follower counts. No public vanity metrics.
 
@@ -53,6 +55,7 @@ Run the SQL in the Supabase SQL editor **in order**:
 3. `supabase/migrations/0002_onboarding_survey_fields.sql`
 4. `supabase/migrations/0003_security_hardening.sql`
 5. `supabase/migrations/0004_age_gate_and_terms.sql`
+6. `supabase/migrations/0005_ignite_gather_groups.sql`
 
 In **Authentication → Providers → Email**, decide on **"Confirm email"**:
 - **On** (recommended for production) — new users get a confirmation link; the signup screen shows a "check your email" prompt.
