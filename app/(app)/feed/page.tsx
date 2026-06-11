@@ -17,7 +17,7 @@ export default function FeedPage() {
 
     const { data: rows } = await supabase
       .from("thoughts")
-      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name)")
+      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name, avatar_url)")
       .is("circle_id", null)
       .order("created_at", { ascending: false })
       .limit(40);

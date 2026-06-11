@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import Avatar from "@/components/avatar";
 
 export default function TopBar() {
-  const [initial, setInitial] = useState("");
+  const [name, setName] = useState("");
+  const [avatar, setAvatar] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -13,12 +15,15 @@ export default function TopBar() {
       if (!user) return;
       const { data } = await supabase
         .from("profiles")
-        .select("display_name, username")
+        .select("display_name, username, avatar_url")
         .eq("id", user.id)
         .single();
-      const name = data?.display_name || data?.username || "?";
-      setInitial(name.charAt(0).toUpperCase());
+      setName(data?.display_name || data?.username || "?");
+      setAvatar(data?.avatar_url ?? null);
     });
+    function onAvatar(e: Event) { setAvatar((e as CustomEvent).detail ?? null); }
+    window.addEventListener("thinkr:avatar", onAvatar);
+    return () => window.removeEventListener("thinkr:avatar", onAvatar);
   }, []);
 
   return (
@@ -46,18 +51,8 @@ export default function TopBar() {
               <path d="M8.5 10.5h7M8.5 13.5h4" />
             </svg>
           </Link>
-          <Link
-            href="/you"
-            aria-label="Your profile"
-            className="w-8 h-8 rounded-full grid place-items-center text-white text-xs font-bold transition-transform active:scale-90"
-            style={{ background: "linear-gradient(135deg, var(--flame), var(--amber))", boxShadow: "var(--shadow-sm)" }}
-          >
-            {initial || (
-              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="8" r="3.4" />
-                <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
-              </svg>
-            )}
+          <Link href="/you" aria-label="Your profile" className="transition-transform active:scale-90">
+            <Avatar name={name} src={avatar} size={32} className="shadow-sm" />
           </Link>
         </div>
       </div>

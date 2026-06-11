@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import Avatar from "@/components/avatar";
 import type { ThoughtWithMeta } from "@/lib/types";
 
 const PALETTES = [
@@ -118,12 +119,7 @@ function FluxSlide({
         style={{ padding: "calc(52px + 6vh) 22px calc(var(--nav-h) + 4vh)" }}
       >
         <Link href={`/profile/${t.author.username}`} className="flex items-center gap-2.5 mb-6 w-fit animate-rise">
-          <div
-            className="w-10 h-10 rounded-full grid place-items-center text-white font-bold"
-            style={{ background: `linear-gradient(135deg, ${palette.accent}, var(--amber))`, boxShadow: "var(--shadow-sm)" }}
-          >
-            {name.charAt(0).toUpperCase()}
-          </div>
+          <Avatar name={name} src={t.author.avatar_url} size={40} color={palette.accent} className="shadow-sm" />
           <div>
             <div className="text-sm font-semibold" style={{ color: "var(--ink-1)" }}>{name}</div>
             <div className="font-label" style={{ fontSize: "10px", color: "var(--ink-40)" }}>
@@ -132,10 +128,21 @@ function FluxSlide({
           </div>
         </Link>
 
+        {t.media_url && (
+          <div className="mb-5 rounded-2xl overflow-hidden animate-rise" style={{ maxHeight: "42vh", boxShadow: "var(--shadow-md)" }}>
+            {t.media_type === "video" ? (
+              <video src={t.media_url} className="w-full object-cover" style={{ maxHeight: "42vh" }} controls playsInline />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={t.media_url} alt="" className="w-full object-cover" style={{ maxHeight: "42vh" }} />
+            )}
+          </div>
+        )}
+
         <p
           className="font-display italic animate-rise"
           style={{
-            fontSize: "clamp(1.7rem, 6.4vw, 2.5rem)",
+            fontSize: t.media_url ? "clamp(1.2rem, 4.6vw, 1.65rem)" : "clamp(1.7rem, 6.4vw, 2.5rem)",
             lineHeight: 1.34,
             fontWeight: 500,
             color: "var(--ink-1)",
@@ -218,7 +225,7 @@ export default function Flux() {
 
     const { data: rows } = await supabase
       .from("thoughts")
-      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name)")
+      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name, avatar_url)")
       .is("circle_id", null)
       .order("created_at", { ascending: false })
       .limit(40);

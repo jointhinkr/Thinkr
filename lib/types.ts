@@ -6,6 +6,7 @@ export type Profile = {
   display_name: string | null;
   bio: string | null;
   city: string | null;
+  avatar_url?: string | null;
   // Onboarding answers used for Thought Twin matching.
   fingerprint: Fingerprint;
   created_at: string;
@@ -61,12 +62,14 @@ export type Thought = {
   body: string;
   parent_id: string | null; // idea inheritance / branches
   circle_id: string | null;
+  media_url?: string | null;
+  media_type?: "image" | "video" | null;
   created_at: string;
 };
 
 // Thought joined with author + the viewer's private resonance flag.
 export type ThoughtWithMeta = Thought & {
-  author: Pick<Profile, "id" | "username" | "display_name">;
+  author: Pick<Profile, "id" | "username" | "display_name" | "avatar_url">;
   resonated: boolean;
   branch_count: number;
 };

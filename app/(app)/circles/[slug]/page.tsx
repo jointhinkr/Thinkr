@@ -44,7 +44,7 @@ export default function CirclePage({ params }: { params: Promise<{ slug: string 
 
     const { data: rows } = await supabase
       .from("thoughts")
-      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name)")
+      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name, avatar_url)")
       .eq("circle_id", c.id)
       .order("created_at", { ascending: false })
       .limit(40);

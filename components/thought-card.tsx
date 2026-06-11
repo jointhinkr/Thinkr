@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import Avatar from "@/components/avatar";
 import type { ThoughtWithMeta } from "@/lib/types";
 
 function timeAgo(iso: string) {
@@ -55,14 +56,7 @@ export default function ThoughtCard({
           href={`/profile/${thought.author.username}`}
           className="flex items-center gap-2 group"
         >
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-            style={{ background: "var(--flame)" }}
-          >
-            {(thought.author.display_name || thought.author.username)
-              .charAt(0)
-              .toUpperCase()}
-          </div>
+          <Avatar name={thought.author.display_name || thought.author.username} src={thought.author.avatar_url} size={32} />
           <div>
             <div className="text-sm font-medium group-hover:underline">
               {thought.author.display_name || thought.author.username}
@@ -78,6 +72,17 @@ export default function ThoughtCard({
       </div>
 
       <p className="text-sm leading-relaxed whitespace-pre-wrap">{thought.body}</p>
+
+      {thought.media_url && (
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--line)" }}>
+          {thought.media_type === "video" ? (
+            <video src={thought.media_url} className="w-full max-h-96" controls playsInline />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={thought.media_url} alt="" className="w-full max-h-96 object-cover" />
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-4 pt-1">
         <button

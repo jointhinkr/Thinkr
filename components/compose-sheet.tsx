@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { uploadToBucket, mediaTypeOf } from "@/lib/upload";
 
 const PROMPTS = [
   "What are you thinking?",
@@ -19,8 +20,23 @@ export default function ComposeSheet() {
   const [posting, setPosting] = useState(false);
   const [prompt, setPrompt] = useState(PROMPTS[0]);
   const [parent, setParent] = useState<{ id: string; body: string } | null>(null);
+  const [media, setMedia] = useState<{ url: string; type: "image" | "video" } | null>(null);
+  const [uploading, setUploading] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const MAX = 2000;
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const type = mediaTypeOf(file);
+    if (!type) return;
+    setUploading(true);
+    const url = await uploadToBucket("media", file);
+    setUploading(false);
+    if (url) setMedia({ url, type });
+  }
 
   useEffect(() => {
     function onOpen(e: Event) {
@@ -32,6 +48,7 @@ export default function ComposeSheet() {
         setParent(null);
         setPrompt(PROMPTS[Math.floor(Math.random() * PROMPTS.length)]);
       }
+      setMedia(null);
       setOpen(true);
     }
     window.addEventListener("thinkr:compose", onOpen);
@@ -59,11 +76,14 @@ export default function ComposeSheet() {
       author_id: user.id,
       body: body.trim(),
       parent_id: parent?.id ?? null,
+      media_url: media?.url ?? null,
+      media_type: media?.type ?? null,
     });
     setPosting(false);
     if (!error) {
       setBody("");
       setParent(null);
+      setMedia(null);
       setOpen(false);
       window.dispatchEvent(new CustomEvent("thinkr:posted"));
       router.refresh();
@@ -116,10 +136,31 @@ export default function ComposeSheet() {
           style={{ fontSize: "1.25rem", lineHeight: 1.5, fontStyle: "italic", color: "var(--ink-1)" }}
         />
 
+        {media && (
+          <div className="relative mt-3 rounded-2xl overflow-hidden" style={{ border: "1px solid var(--line)" }}>
+            {media.type === "image" ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={media.url} alt="attachment" className="w-full max-h-72 object-cover" />
+            ) : (
+              <video src={media.url} className="w-full max-h-72" controls />
+            )}
+            <button onClick={() => setMedia(null)} aria-label="Remove media"
+              className="absolute top-2 right-2 w-7 h-7 rounded-full grid place-items-center text-white text-sm"
+              style={{ background: "rgba(28,20,11,0.55)" }}>✕</button>
+          </div>
+        )}
+
+        <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleFile} className="hidden" />
+
         <div className="flex items-center justify-between mt-4">
-          <span className="text-xs" style={{ color: "var(--ink-40)" }}>
-            No likes. No counts. Just the idea.
-          </span>
+          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full disabled:opacity-50 active:scale-95 transition-transform"
+            style={{ border: "1px solid var(--line-2)", color: "var(--ink-60)" }}>
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="m4 17 5-4 4 3 3-2 4 3" />
+            </svg>
+            {uploading ? "uploading…" : media ? "change" : "photo / video"}
+          </button>
           <button
             onClick={post}
             disabled={posting || !body.trim()}

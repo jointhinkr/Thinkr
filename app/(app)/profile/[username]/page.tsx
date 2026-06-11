@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import ThoughtCard from "@/components/thought-card";
+import Avatar from "@/components/avatar";
+import { uploadToBucket } from "@/lib/upload";
 import type { Profile, ThoughtWithMeta } from "@/lib/types";
 
 const AXIS_LABELS: Record<string, [string, string]> = {
@@ -24,6 +26,8 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ display_name: "", bio: "", city: "" });
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   async function signOut() {
@@ -31,6 +35,21 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
+  }
+
+  async function handleAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !profile) return;
+    setUploadingAvatar(true);
+    const url = await uploadToBucket("avatars", file);
+    if (url) {
+      const supabase = createClient();
+      await supabase.from("profiles").update({ avatar_url: url }).eq("id", profile.id);
+      setProfile((p) => (p ? { ...p, avatar_url: url } : p));
+      window.dispatchEvent(new CustomEvent("thinkr:avatar", { detail: url }));
+    }
+    setUploadingAvatar(false);
   }
 
   const load = useCallback(async () => {
@@ -54,7 +73,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
 
     const { data: rows } = await supabase
       .from("thoughts")
-      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name)")
+      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name, avatar_url)")
       .eq("author_id", p.id)
       .is("circle_id", null)
       .order("created_at", { ascending: false })
@@ -124,11 +143,24 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       <div className="rounded-2xl bg-white border border-black/6 px-6 py-6">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center text-white text-2xl font-bold"
-              style={{ background: "var(--flame)" }}
-            >
-              {(profile.display_name || profile.username).charAt(0).toUpperCase()}
+            <div className="relative shrink-0">
+              <Avatar name={profile.display_name || profile.username} src={profile.avatar_url} size={56} />
+              {isMe && (
+                <>
+                  <button onClick={() => avatarRef.current?.click()} disabled={uploadingAvatar} aria-label="Change photo"
+                    className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full grid place-items-center text-white"
+                    style={{ background: "var(--flame)", border: "2px solid #fff" }}>
+                    {uploadingAvatar ? (
+                      <span className="text-[10px]">…</span>
+                    ) : (
+                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14.5 4h-5L8 6H4v14h16V6h-4z" /><circle cx="12" cy="13" r="3.2" />
+                      </svg>
+                    )}
+                  </button>
+                  <input ref={avatarRef} type="file" accept="image/*" onChange={handleAvatar} className="hidden" />
+                </>
+              )}
             </div>
             {!editing ? (
               <div>

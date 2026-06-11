@@ -24,6 +24,7 @@ A connection-first social platform. People find each other by **how they think**
 - **Gather** — real-world meetups with RSVPs (reached from inside Echo)
 - **Circles** — topic communities with their own feeds
 - **Resonance** — private signal that replaces likes. No follower counts. No public vanity metrics.
+- **Profile pictures & media** — optional avatar photos (the orange "aura" is the default) and image/video on posts, via Supabase Storage
 
 ## Local development
 
@@ -56,6 +57,7 @@ Run the SQL in the Supabase SQL editor **in order**:
 4. `supabase/migrations/0003_security_hardening.sql`
 5. `supabase/migrations/0004_age_gate_and_terms.sql`
 6. `supabase/migrations/0005_ignite_gather_groups.sql`
+7. `supabase/migrations/0006_avatars_and_media.sql` (also creates the `avatars` + `media` Storage buckets)
 
 In **Authentication → Providers → Email**, decide on **"Confirm email"**:
 - **On** (recommended for production) — new users get a confirmation link; the signup screen shows a "check your email" prompt.
