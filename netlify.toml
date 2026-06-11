@@ -1,0 +1,12 @@
+# Netlify build config for the Thinkr Next.js app.
+# The official Next.js plugin handles SSR, the proxy.ts auth guard, and routing.
+
+[build]
+  command = "next build"
+
+[build.environment]
+  # Next.js 16 + its tooling need Node 20.19+ (or 22). "20" pulls the latest 20.x.
+  NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
