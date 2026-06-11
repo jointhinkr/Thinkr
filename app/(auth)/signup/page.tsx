@@ -62,6 +62,9 @@ export default function SignupPage() {
           <p className="text-sm opacity-60">
             We sent a confirmation link to <b>{form.email}</b>. Click it to activate your account, then come back and sign in.
           </p>
+          <div className="mt-4 mx-auto max-w-xs rounded-xl px-4 py-3 text-sm" style={{ background: "#FFF6EC", border: "1px solid var(--amber)", color: "var(--ink-60)" }}>
+            📩 Don&apos;t see it? <b>Check your spam / junk folder</b> — and mark it &quot;Not spam&quot; so future emails land in your inbox.
+          </div>
           <Link href="/login" className="inline-block mt-6 px-5 py-2.5 rounded-full text-white text-sm font-semibold" style={{ background: "var(--flame)" }}>
             Back to sign in
           </Link>

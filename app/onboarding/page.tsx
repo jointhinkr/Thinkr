@@ -348,11 +348,11 @@ function Result({ scores: s, onFinish, saving, onRetake }: { scores: Record<Axis
       <div className="font-label mt-1.5" style={{ letterSpacing: "0.18em", color: "var(--flame)", fontSize: 14 }}>{code}</div>
       <p className="mt-4 text-[16.5px]" style={{ color: "var(--ink-1)" }}>{desc}</p>
       <div className="flex flex-col gap-4 mt-6">
-        <Axis l0="Abstract" l1="Concrete" v={s.AK} />
+        <Axis l0="Ideas" l1="Practical" v={s.AK} />
         <Axis l0="Optimist" l1="Skeptic" v={s.OS} />
         <Axis l0="Builder" l1="Refiner" v={s.BR} />
         <Axis l0="Solo" l1="Social" v={s.LG} />
-        <Axis l0="Novelty" l1="Depth" v={s.ND} />
+        <Axis l0="Explorer" l1="Deep-diver" v={s.ND} />
       </div>
       <div className="mt-6 rounded-[18px] p-6 text-center" style={{ background: "var(--flame)", color: "var(--cream)" }}>
         <div className="font-display text-[22px] leading-tight">Now meet the minds closest to yours.</div>

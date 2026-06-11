@@ -129,12 +129,22 @@ function FluxSlide({
         </Link>
 
         {t.media_url && (
-          <div className="mb-5 rounded-2xl overflow-hidden animate-rise" style={{ maxHeight: "42vh", boxShadow: "var(--shadow-md)" }}>
+          <div
+            className="mb-4 mx-auto rounded-2xl overflow-hidden animate-rise"
+            style={{
+              width: "100%",
+              maxWidth: "min(90vw, 31.5vh)",
+              aspectRatio: "9 / 16",
+              maxHeight: "56vh",
+              background: "rgba(28,20,11,0.10)",
+              boxShadow: "var(--shadow-md)",
+            }}
+          >
             {t.media_type === "video" ? (
-              <video src={t.media_url} className="w-full object-cover" style={{ maxHeight: "42vh" }} controls playsInline />
+              <video src={t.media_url} className="w-full h-full object-contain" controls playsInline />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={t.media_url} alt="" className="w-full object-cover" style={{ maxHeight: "42vh" }} />
+              <img src={t.media_url} alt="" className="w-full h-full object-contain" />
             )}
           </div>
         )}

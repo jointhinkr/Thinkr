@@ -31,13 +31,21 @@ export default function LoginPage() {
     setError("");
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/flux");
+      // New users (no thinking fingerprint yet) start with the questionnaire.
+      let dest = "/flux";
+      const uid = signInData.user?.id;
+      if (uid) {
+        const { data: prof } = await supabase.from("profiles").select("fingerprint").eq("id", uid).single();
+        const fp = (prof?.fingerprint ?? {}) as Record<string, unknown>;
+        if (Object.keys(fp).length === 0) dest = "/onboarding";
+      }
+      router.push(dest);
       router.refresh();
     }
   }
