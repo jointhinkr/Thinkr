@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { use } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import ThoughtCard from "@/components/thought-card";
 import Avatar from "@/components/avatar";
 import ProfileActions from "@/components/profile-actions";
 import { uploadToBucket } from "@/lib/upload";
+import { isAdmin } from "@/lib/auth/permissions";
 import type { Profile, ThoughtWithMeta } from "@/lib/types";
 
 const AXIS_LABELS: Record<string, [string, string]> = {
@@ -410,6 +412,16 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
           </div>
         )}
       </div>
+
+      {isMe && isAdmin(profile) && (
+        <Link
+          href="/admin/daily-question"
+          className="block w-full text-center py-3 rounded-2xl text-sm font-semibold"
+          style={{ border: "1.5px solid var(--flame)", color: "var(--flame)" }}
+        >
+          ⚙ Admin · Edit daily question
+        </Link>
+      )}
 
       {isMe && (
         <button

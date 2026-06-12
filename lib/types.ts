@@ -29,6 +29,8 @@ export type Profile = {
   // Daily Spark streak.
   spark_streak?: number | null;
   spark_last_answered?: string | null;
+  // Role / entitlements (Session 1+). admin inherits premium.
+  role?: "user" | "premium" | "admin" | null;
 };
 
 // One-directional follow. muser follows muse.
