@@ -722,3 +722,59 @@ begin
 end; $$;
 revoke execute on function public.set_daily_question(text) from anon, public;
 grant execute on function public.set_daily_question(text) to authenticated;
+
+-- ========== migrations/0012_video_access_stripe.sql ==========
+-- Session 2: Thinkr+ $25 one-time video unlock (Stripe).
+alter table public.profiles
+  add column if not exists has_video_access boolean not null default false;
+
+create table if not exists public.stripe_events (
+  id           text primary key,
+  type         text,
+  processed_at timestamptz not null default now()
+);
+alter table public.stripe_events enable row level security;
+
+create or replace function private.has_video_or_premium(uid uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+    where id = uid and (has_video_access = true or role in ('premium', 'admin'))
+  );
+$$;
+grant execute on function private.has_video_or_premium(uuid) to authenticated;
+
+drop policy if exists "host creates room" on public.live_rooms;
+create policy "host creates room" on public.live_rooms for insert
+  with check (
+    auth.uid() = host_id
+    and (is_stream = false or private.has_video_or_premium(auth.uid()))
+  );
+
+create or replace function public.guard_profile_privileges()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and not private.is_admin(auth.uid()) then
+    if new.role is distinct from old.role then
+      raise exception 'not allowed to change role';
+    end if;
+    if new.has_video_access is distinct from old.has_video_access then
+      raise exception 'not allowed to change video access';
+    end if;
+  end if;
+  return new;
+end; $$;
+
+create or replace function public.grant_from_stripe(
+  event_id text, event_type text, target uuid, kind text, tries int default 0
+) returns void language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.stripe_events(id, type) values (event_id, event_type);
+  if kind = 'video' then
+    update public.profiles set has_video_access = true where id = target;
+  end if;
+exception when unique_violation then
+  return;
+end; $$;
+revoke execute on function public.grant_from_stripe(text, text, uuid, text, int) from anon, authenticated, public;
+grant  execute on function public.grant_from_stripe(text, text, uuid, text, int) to service_role;

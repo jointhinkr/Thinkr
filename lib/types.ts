@@ -31,6 +31,8 @@ export type Profile = {
   spark_last_answered?: string | null;
   // Role / entitlements (Session 1+). admin inherits premium.
   role?: "user" | "premium" | "admin" | null;
+  // Thinkr+ $25 one-time video unlock — granted only by the Stripe webhook.
+  has_video_access?: boolean | null;
 };
 
 // One-directional follow. muser follows muse.

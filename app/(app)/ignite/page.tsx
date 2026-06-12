@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { hasPremium } from "@/lib/auth/permissions";
 import type { Profile } from "@/lib/types";
 
 const KINDS = [
@@ -27,9 +28,23 @@ export default function IgnitePage() {
   const [form, setForm] = useState({ title: "", topic: "", kind: "open", isStream: false });
   const [posting, setPosting] = useState(false);
   const [revokedMsg, setRevokedMsg] = useState("");
+  const [canVideo, setCanVideo] = useState(false);
+  const [buying, setBuying] = useState(false);
+  const [payMsg, setPayMsg] = useState("");
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("video");
+    if (p === "success") setPayMsg("✓ Payment received — your video access is unlocking. If the camera option isn't on yet, refresh in a few seconds.");
+    else if (p === "cancel") setPayMsg("Checkout canceled — no charge. You can unlock video anytime.");
+  }, []);
 
   const load = useCallback(async () => {
     const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: me } = await supabase.from("profiles").select("has_video_access, role").eq("id", user.id).single();
+      setCanVideo(!!me && (!!me.has_video_access || hasPremium(me)));
+    }
     const { data: rows } = await supabase
       .from("live_rooms")
       .select("id, title, topic, kind, is_stream, host:profiles!live_rooms_host_id_fkey(username, display_name)")
@@ -44,6 +59,18 @@ export default function IgnitePage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  async function buyVideo() {
+    if (buying) return;
+    setBuying(true);
+    try {
+      const res = await fetch("/api/checkout/video", { method: "POST" });
+      const data = await res.json();
+      if (data.url) { window.location.href = data.url; return; }
+      setRevokedMsg(data.error || "Could not start checkout.");
+    } catch { setRevokedMsg("Could not start checkout."); }
+    setBuying(false);
+  }
 
   async function createRoom() {
     if (!form.title.trim() || posting) return;
@@ -92,6 +119,12 @@ export default function IgnitePage() {
         </button>
       </div>
 
+      {payMsg && (
+        <div className="rounded-xl px-4 py-3 text-sm" style={{ background: "#FFF6EC", border: "1px solid var(--amber)", color: "var(--ink-1)" }}>
+          {payMsg}
+        </div>
+      )}
+
       {creating && (
         <div className="rounded-2xl p-4 space-y-3" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
           <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Room title" maxLength={140}
@@ -111,14 +144,25 @@ export default function IgnitePage() {
             <input type="checkbox" checked={form.isStream} onChange={(e) => setForm((f) => ({ ...f, isStream: e.target.checked }))} className="accent-orange-600 w-4 h-4" />
             <span className="text-sm" style={{ color: "var(--ink-1)" }}>📹 Stream my camera (live video)</span>
           </label>
-          {form.isStream && (
+          {form.isStream && canVideo && (
             <p className="text-xs" style={{ color: "var(--ink-40)", lineHeight: 1.45 }}>
               Your screen and chat are moderated. Any report ends your stream and revokes your livestream access.
             </p>
           )}
+          {form.isStream && !canVideo && (
+            <div className="rounded-xl p-3" style={{ background: "#FFF6EC", border: "1px solid var(--amber)" }}>
+              <p className="text-xs" style={{ color: "var(--ink-1)", fontWeight: 600 }}>Video livestreaming is a Thinkr+ feature.</p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--ink-60)", lineHeight: 1.45 }}>Unlock camera streaming with a one-time $25 payment. Text rooms stay free.</p>
+              <button onClick={buyVideo} disabled={buying}
+                className="mt-2 px-4 py-2 rounded-full text-white text-xs font-semibold disabled:opacity-50"
+                style={{ background: "linear-gradient(135deg, var(--flame), var(--flame-deep))" }}>
+                {buying ? "…" : "Unlock video · $25"}
+              </button>
+            </div>
+          )}
           {revokedMsg && <p className="text-xs" style={{ color: "#dc2626" }}>{revokedMsg}</p>}
           <div className="flex justify-end">
-            <button onClick={createRoom} disabled={posting || !form.title.trim()}
+            <button onClick={createRoom} disabled={posting || !form.title.trim() || (form.isStream && !canVideo)}
               className="px-4 py-2 rounded-full text-white text-sm font-semibold disabled:opacity-40"
               style={{ background: "linear-gradient(135deg, var(--flame), var(--flame-deep))" }}>
               {posting ? "starting…" : form.isStream ? "go live (camera)" : "go live"}

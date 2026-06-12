@@ -31,9 +31,10 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Legal pages are open to everyone (signed in or not) and never redirect —
-  // users must be able to read the Terms/Privacy/Cookie policy they agree to.
-  const openPaths = ["/terms", "/privacy", "/cookies"];
+  // Open to everyone, never redirected: legal pages (users must be able to read
+  // what they agree to) and the Stripe webhook (an unauthenticated server-to-
+  // server POST that authenticates via signature, not a session cookie).
+  const openPaths = ["/terms", "/privacy", "/cookies", "/api/stripe/webhook"];
   if (openPaths.some((p) => pathname.startsWith(p))) {
     return supabaseResponse;
   }
