@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/avatar";
+import RichText from "@/components/rich-text";
 import type { ThoughtWithMeta } from "@/lib/types";
 
 function timeAgo(iso: string) {
@@ -46,25 +47,6 @@ export default function ThoughtCard({
     setDeleting(false);
     setMenu(false);
     onChanged?.();
-  }
-
-  const [branches, setBranches] = useState<ThoughtWithMeta[] | null>(null);
-  const [showBranches, setShowBranches] = useState(false);
-  const [loadingBranches, setLoadingBranches] = useState(false);
-
-  async function toggleBranches() {
-    if (showBranches) { setShowBranches(false); return; }
-    setShowBranches(true);
-    if (branches) return;
-    setLoadingBranches(true);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("thoughts")
-      .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name, avatar_url)")
-      .eq("parent_id", thought.id)
-      .order("created_at", { ascending: true });
-    setBranches((data ?? []).map((r) => ({ ...r, author: r.author, resonated: false, branch_count: 0 })));
-    setLoadingBranches(false);
   }
 
   async function toggleResonance() {
@@ -135,7 +117,7 @@ export default function ThoughtCard({
         </div>
       </div>
 
-      <p className="text-sm leading-relaxed whitespace-pre-wrap">{thought.body}</p>
+      <p className="text-sm leading-relaxed whitespace-pre-wrap"><RichText text={thought.body} /></p>
 
       {thought.media_url && (
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--line)" }}>
@@ -175,36 +157,15 @@ export default function ThoughtCard({
           </button>
         )}
 
-        {thought.branch_count > 0 && (
-          <button
-            onClick={toggleBranches}
-            className="flex items-center gap-1.5 text-xs transition-opacity"
-            style={{ fontFamily: "'Space Mono', monospace", color: "var(--flame)" }}
-          >
-            <span>↳</span>
-            <span>{showBranches ? "hide" : "view"} {thought.branch_count} branch{thought.branch_count > 1 ? "es" : ""}</span>
-          </button>
-        )}
+        <Link
+          href={`/thought/${thought.id}`}
+          className="flex items-center gap-1.5 text-xs transition-opacity"
+          style={{ fontFamily: "'Space Mono', monospace", color: thought.branch_count > 0 ? "var(--flame)" : "inherit", opacity: thought.branch_count > 0 ? 1 : 0.4 }}
+        >
+          <span>↳</span>
+          <span>{thought.branch_count > 0 ? `${thought.branch_count} branch${thought.branch_count > 1 ? "es" : ""}` : "view thread"}</span>
+        </Link>
       </div>
-
-      {showBranches && (
-        <div className="space-y-2 pl-3 mt-1" style={{ borderLeft: "2px solid var(--amber)" }}>
-          {loadingBranches ? (
-            <div className="text-xs opacity-40 py-1">Loading branches…</div>
-          ) : branches && branches.length > 0 ? (
-            branches.map((b) => (
-              <div key={b.id} className="rounded-xl px-3 py-2.5" style={{ background: "var(--cream)" }}>
-                <Link href={`/profile/${b.author.username}`} className="text-xs font-medium hover:underline">
-                  {b.author.display_name || b.author.username}
-                </Link>
-                <p className="text-sm mt-1 whitespace-pre-wrap" style={{ color: "var(--ink-1)" }}>{b.body}</p>
-              </div>
-            ))
-          ) : (
-            <div className="text-xs opacity-40 py-1">No branches yet.</div>
-          )}
-        </div>
-      )}
     </article>
   );
 }

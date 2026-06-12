@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { findThoughtTwin } from "@/lib/matching";
+import TwinQuiz from "@/components/twin-quiz";
 import type { Profile, MatchPrefs } from "@/lib/types";
 
 // Plain-language labels for each thinking axis (the survey jargon was confusing).
@@ -222,16 +223,19 @@ export default function TwinPage() {
       )}
 
       {phase === "none" && (
-        <div className="rounded-2xl p-7 text-center" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
-          <div className="text-3xl mb-2">🧠</div>
-          <p className="font-medium" style={{ color: "var(--ink-1)" }}>No match yet</p>
-          <p className="text-sm mt-1" style={{ color: "var(--ink-60)" }}>
-            You need at least one other thinker who&apos;s taken the questionnaire. Keep posting — we&apos;ll keep matching as more minds join.
-          </p>
-          <button onClick={() => { excludedRef.current = []; runMatch(); }} className="mt-5 px-5 py-2.5 rounded-full text-sm font-semibold" style={{ border: "1.5px solid var(--line-2)", color: "var(--ink-60)" }}>
-            Try again
-          </button>
-        </div>
+        <>
+          <div className="rounded-2xl p-7 text-center" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
+            <div className="text-3xl mb-2">🧠</div>
+            <p className="font-medium" style={{ color: "var(--ink-1)" }}>No match yet</p>
+            <p className="text-sm mt-1" style={{ color: "var(--ink-60)" }}>
+              You need at least one other thinker who&apos;s taken the questionnaire. Keep posting — we&apos;ll keep matching as more minds join.
+            </p>
+            <button onClick={() => { excludedRef.current = []; runMatch(); }} className="mt-5 px-5 py-2.5 rounded-full text-sm font-semibold" style={{ border: "1.5px solid var(--line-2)", color: "var(--ink-60)" }}>
+              Try again
+            </button>
+          </div>
+          <TwinQuiz />
+        </>
       )}
 
       {/* RESULT */}
@@ -311,6 +315,8 @@ export default function TwinPage() {
               Want to edit your questionnaire answers? →
             </Link>
           </div>
+
+          <TwinQuiz />
         </>
       )}
     </div>

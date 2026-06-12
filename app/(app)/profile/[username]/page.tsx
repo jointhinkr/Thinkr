@@ -272,7 +272,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                 <input
                   value={editForm.city}
                   onChange={(e) => setEditForm((f) => ({ ...f, city: e.target.value }))}
-                  placeholder="City"
+                  placeholder="State / Province"
                   className="w-full text-sm border-b border-black/15 pb-1 focus:outline-none bg-transparent"
                 />
                 <div>

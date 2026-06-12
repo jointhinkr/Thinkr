@@ -1,11 +1,12 @@
 // Thinkr — Thought Twin matching
-// MVP approach: cosine similarity over the onboarding "fingerprint".
-// Good enough to ship; upgrade to pgvector + embeddings of users'
-// actual thoughts once you have real content volume.
+// Cosine similarity over the onboarding "fingerprint" PLUS any extra
+// dimensions the user has accrued (q:<key> from the endless Twin quiz,
+// hashtag-nudged axes). The 5 core axes are always compared; extra
+// dimensions either person has are included, defaulting the other to 0.5.
 
 import type { Fingerprint, Profile } from "./types";
 
-const AXES = [
+const CORE_AXES = [
   "abstract_vs_concrete",
   "optimist_vs_skeptic",
   "builder_vs_critic",
@@ -13,13 +14,21 @@ const AXES = [
   "novelty_vs_depth",
 ] as const;
 
-function toVector(fp: Fingerprint): number[] {
-  return AXES.map((a) => (typeof fp[a] === "number" ? (fp[a] as number) : 0.5));
+function comparedKeys(a: Fingerprint, b: Fingerprint): string[] {
+  const keys = new Set<string>(CORE_AXES);
+  for (const k of Object.keys(a ?? {})) if (typeof a[k] === "number") keys.add(k);
+  for (const k of Object.keys(b ?? {})) if (typeof b[k] === "number") keys.add(k);
+  return [...keys];
+}
+
+function vectorFor(fp: Fingerprint, keys: string[]): number[] {
+  return keys.map((k) => (typeof fp?.[k] === "number" ? (fp[k] as number) : 0.5));
 }
 
 export function similarity(a: Fingerprint, b: Fingerprint): number {
-  const va = toVector(a);
-  const vb = toVector(b);
+  const keys = comparedKeys(a ?? {}, b ?? {});
+  const va = vectorFor(a ?? {}, keys);
+  const vb = vectorFor(b ?? {}, keys);
   let dot = 0;
   let na = 0;
   let nb = 0;

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { uploadToBucket, mediaTypeOf } from "@/lib/upload";
+import { parseHashtags, applyHashtagMetrics } from "@/lib/twin-metrics";
 
 const PROMPTS = [
   "What are you thinking?",
@@ -86,6 +87,7 @@ export default function ComposeSheet() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setPosting(false); return; }
     let error;
+    let thoughtId: string | null = editId;
     if (editId) {
       ({ error } = await supabase.from("thoughts").update({
         body: body.trim(),
@@ -93,14 +95,29 @@ export default function ComposeSheet() {
         media_type: media?.type ?? null,
       }).eq("id", editId).eq("author_id", user.id));
     } else {
-      ({ error } = await supabase.from("thoughts").insert({
+      const res = await supabase.from("thoughts").insert({
         author_id: user.id,
         body: body.trim(),
         parent_id: parent?.id ?? null,
         media_url: media?.url ?? null,
         media_type: media?.type ?? null,
-      }));
+      }).select("id").single();
+      error = res.error;
+      thoughtId = res.data?.id ?? null;
     }
+
+    // Hashtags: store for search/tag pages + nudge the author's fingerprint.
+    if (!error && thoughtId) {
+      const tags = parseHashtags(body.trim());
+      await supabase.from("thought_hashtags").delete().eq("thought_id", thoughtId);
+      if (tags.length) {
+        await supabase.from("thought_hashtags").insert(tags.map((t) => ({ thought_id: thoughtId, tag: t, author_id: user.id })));
+        const { data: prof } = await supabase.from("profiles").select("fingerprint").eq("id", user.id).single();
+        const nudged = applyHashtagMetrics(prof?.fingerprint ?? {}, tags);
+        if (nudged) await supabase.from("profiles").update({ fingerprint: nudged }).eq("id", user.id);
+      }
+    }
+
     setPosting(false);
     if (!error) {
       setBody("");
@@ -174,6 +191,10 @@ export default function ComposeSheet() {
         )}
 
         <input ref={fileRef} type="file" accept="image/*,video/*" onChange={handleFile} className="hidden" />
+
+        <p className="text-[11px] mt-2" style={{ color: "var(--ink-40)" }}>
+          Tip: add <span style={{ color: "var(--flame)", fontWeight: 600 }}>#hashtags</span> like #abstract or #stem — they power search and tune your Thought Twin.
+        </p>
 
         <div className="flex items-center justify-between mt-4">
           <button onClick={() => fileRef.current?.click()} disabled={uploading}

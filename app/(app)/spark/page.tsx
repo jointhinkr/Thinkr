@@ -14,6 +14,7 @@ export default function SparkPage() {
   const [posting, setPosting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -22,6 +23,13 @@ export default function SparkPage() {
       setUserId(user?.id ?? null);
 
       const today = new Date().toISOString().split("T")[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+      if (user) {
+        const { data: prof } = await supabase.from("profiles").select("spark_streak, spark_last_answered").eq("id", user.id).single();
+        const last = prof?.spark_last_answered ?? null;
+        const alive = last === today || last === yesterday;
+        setStreak(alive ? (prof?.spark_streak ?? 0) : 0);
+      }
       const { data: p } = await supabase
         .from("spark_prompts")
         .select()
@@ -65,6 +73,8 @@ export default function SparkPage() {
       setMyResponse(data);
       setResponses((r) => [data as ResponseWithAuthor, ...r]);
       setDraft("");
+      const { data: s } = await supabase.rpc("record_spark_answer");
+      if (typeof s === "number") setStreak(s);
     }
     setPosting(false);
   }
@@ -84,12 +94,20 @@ export default function SparkPage() {
   return (
     <div className="space-y-6">
       <div>
-        <span
-          className="text-xs tracking-widest opacity-40"
-          style={{ fontFamily: "'Space Mono', monospace" }}
-        >
-          THE DAILY SPARK · {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-        </span>
+        <div className="flex items-center justify-between gap-2">
+          <span
+            className="text-xs tracking-widest opacity-40"
+            style={{ fontFamily: "'Space Mono', monospace" }}
+          >
+            THE DAILY SPARK · {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+          </span>
+          {streak > 0 && (
+            <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold"
+              style={{ background: "rgba(244,74,38,0.1)", color: "var(--flame)" }}>
+              🔥 {streak} day{streak !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
         <h1
           className="text-2xl mt-2 leading-snug"
           style={{ fontFamily: "'Fraunces', serif" }}

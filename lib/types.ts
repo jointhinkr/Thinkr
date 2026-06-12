@@ -26,6 +26,9 @@ export type Profile = {
   resonances_private?: boolean | null;
   // Set when a livestream of theirs is reported; blocks going live again.
   livestream_revoked?: boolean | null;
+  // Daily Spark streak.
+  spark_streak?: number | null;
+  spark_last_answered?: string | null;
 };
 
 // One-directional follow. muser follows muse.

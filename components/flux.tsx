@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/avatar";
 import FluxSearch from "@/components/flux-search";
+import RichText from "@/components/rich-text";
 import type { ThoughtWithMeta } from "@/lib/types";
 
 const PALETTES = [
@@ -66,6 +67,7 @@ function FluxSlide({
   const [menu, setMenu] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const name = t.author.display_name || t.author.username;
+  const router = useRouter();
   const isOwner = !!userId && userId === t.author.id;
 
   function editThought() {
@@ -98,7 +100,7 @@ function FluxSlide({
   }
 
   function branch() {
-    window.dispatchEvent(new CustomEvent("thinkr:compose", { detail: { parentId: t.id, parentBody: t.body } }));
+    router.push(`/thought/${t.id}`);
   }
 
   function share() {
@@ -196,7 +198,7 @@ function FluxSlide({
           } as React.CSSProperties}
         >
           <span style={{ color: palette.accent, fontWeight: 600 }}>“</span>
-          {t.body}
+          <RichText text={t.body} />
           <span style={{ color: palette.accent, fontWeight: 600 }}>”</span>
         </p>
 
@@ -256,7 +258,6 @@ function FluxSlide({
 }
 
 export default function Flux() {
-  const router = useRouter();
   const [thoughts, setThoughts] = useState<ThoughtWithMeta[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
