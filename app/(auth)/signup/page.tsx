@@ -155,6 +155,14 @@ export default function SignupPage() {
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
           )}
 
+          <p className="text-xs leading-relaxed" style={{ color: "var(--ink-40)" }}>
+            By creating an account, you confirm you are 18 or older — or an authorized Thinkr beta tester — and you agree
+            to our{" "}
+            <Link href="/terms" className="underline" style={{ color: "var(--flame)" }}>Terms</Link>,{" "}
+            <Link href="/privacy" className="underline" style={{ color: "var(--flame)" }}>Privacy Policy</Link>, and{" "}
+            <Link href="/cookies" className="underline" style={{ color: "var(--flame)" }}>Cookie Policy</Link>.
+          </p>
+
           <button
             type="submit"
             disabled={loading}

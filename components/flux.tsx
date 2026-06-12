@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/avatar";
+import FluxSearch from "@/components/flux-search";
 import type { ThoughtWithMeta } from "@/lib/types";
 
 const PALETTES = [
@@ -61,9 +62,25 @@ function FluxSlide({
 }) {
   const [resonated, setResonated] = useState(t.resonated);
   const [burst, setBurst] = useState(false);
-  const [shared, setShared] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
   const name = t.author.display_name || t.author.username;
+  const isOwner = !!userId && userId === t.author.id;
+
+  function editThought() {
+    setMenu(false);
+    window.dispatchEvent(new CustomEvent("thinkr:compose", {
+      detail: { editId: t.id, editBody: t.body, editMediaUrl: t.media_url, editMediaType: t.media_type },
+    }));
+  }
+  async function deleteThought() {
+    const supabase = createClient();
+    await supabase.from("thoughts").delete().eq("id", t.id);
+    setMenu(false);
+    setConfirmDel(false);
+    window.dispatchEvent(new CustomEvent("thinkr:posted"));
+  }
 
   async function toggleResonance() {
     if (busy || !userId) return;
@@ -84,12 +101,8 @@ function FluxSlide({
     window.dispatchEvent(new CustomEvent("thinkr:compose", { detail: { parentId: t.id, parentBody: t.body } }));
   }
 
-  async function share() {
-    const text = `“${t.body}” — @${t.author.username} · via Thinkr`;
-    try {
-      if (navigator.share) await navigator.share({ text });
-      else { await navigator.clipboard.writeText(text); setShared(true); setTimeout(() => setShared(false), 1600); }
-    } catch { /* dismissed */ }
+  function share() {
+    window.dispatchEvent(new CustomEvent("thinkr:share", { detail: { id: t.id, body: t.body, username: t.author.username } }));
   }
 
   return (
@@ -112,6 +125,28 @@ function FluxSlide({
         }}
       />
       <Particles accent={palette.accent} />
+
+      {/* owner menu */}
+      {isOwner && (
+        <div className="absolute z-20" style={{ top: "calc(52px + 2vh)", right: 14 }}>
+          <button onClick={() => { setMenu((m) => !m); setConfirmDel(false); }} aria-label="Post options"
+            className="w-9 h-9 rounded-full grid place-items-center glass border active:scale-90 transition-transform"
+            style={{ borderColor: "var(--line-2)", color: "var(--ink-60)" }}>
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+          </button>
+          {menu && (
+            <div className="absolute right-0 mt-1.5 w-40 rounded-xl overflow-hidden py-1"
+              style={{ background: "var(--paper)", border: "1px solid var(--line)", boxShadow: "var(--shadow-lg)" }}>
+              <button onClick={editThought} className="w-full text-left px-4 py-2.5 text-sm" style={{ color: "var(--ink-1)" }}>Edit thought</button>
+              {!confirmDel ? (
+                <button onClick={() => setConfirmDel(true)} className="w-full text-left px-4 py-2.5 text-sm" style={{ color: "#dc2626" }}>Delete</button>
+              ) : (
+                <button onClick={deleteThought} className="w-full text-left px-4 py-2.5 text-sm font-semibold" style={{ color: "#dc2626", background: "#fee2e2" }}>Tap to confirm delete</button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* content */}
       <div
@@ -213,7 +248,7 @@ function FluxSlide({
               <path d="M7 17 17 7M9 7h8v8" />
             </svg>
           </span>
-          <span className="font-label" style={{ fontSize: "9px", color: "var(--ink-40)" }}>{shared ? "copied" : "share"}</span>
+          <span className="font-label" style={{ fontSize: "9px", color: "var(--ink-40)" }}>share</span>
         </button>
       </div>
     </section>
@@ -233,14 +268,22 @@ export default function Flux() {
     const { data: { user } } = await supabase.auth.getUser();
     setUserId(user?.id ?? null);
 
-    const { data: rows } = await supabase
+    const { data: allRows } = await supabase
       .from("thoughts")
       .select("*, author:profiles!thoughts_author_id_fkey(id, username, display_name, avatar_url)")
       .is("circle_id", null)
       .order("created_at", { ascending: false })
       .limit(40);
 
-    if (!rows) { setLoading(false); return; }
+    if (!allRows) { setLoading(false); return; }
+
+    // Hide thoughts from people I've blocked.
+    let blocked = new Set<string>();
+    if (user) {
+      const { data: blk } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", user.id);
+      blocked = new Set((blk ?? []).map((b: { blocked_id: string }) => b.blocked_id));
+    }
+    const rows = allRows.filter((r) => !blocked.has(r.author_id));
 
     let resonatedSet = new Set<string>();
     if (user) {
@@ -313,6 +356,9 @@ export default function Flux() {
           <FluxSlide key={t.id} t={t} palette={PALETTES[i % PALETTES.length]} userId={userId} />
         ))}
       </div>
+
+      {/* Search */}
+      <FluxSearch />
 
       {/* Ignite live entry */}
       <Link href="/ignite" className="fixed left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full glass active:scale-95 transition-transform"

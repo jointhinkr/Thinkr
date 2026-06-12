@@ -1,6 +1,7 @@
 import TopBar from "@/components/top-bar";
 import BottomNav from "@/components/bottom-nav";
 import ComposeSheet from "@/components/compose-sheet";
+import ShareSheet from "@/components/share-sheet";
 import AgeGate from "@/components/age-gate";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -12,6 +13,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
       <BottomNav />
       <ComposeSheet />
+      <ShareSheet />
       <AgeGate />
     </div>
   );

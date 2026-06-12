@@ -15,7 +15,7 @@ const KINDS = [
 const kindOf = (v: string) => KINDS.find((k) => k.v === v) ?? KINDS[3];
 
 type Room = {
-  id: string; title: string; topic: string | null; kind: string;
+  id: string; title: string; topic: string | null; kind: string; is_stream: boolean;
   host: Pick<Profile, "username" | "display_name">; count: number;
 };
 
@@ -24,14 +24,15 @@ export default function IgnitePage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: "", topic: "", kind: "open" });
+  const [form, setForm] = useState({ title: "", topic: "", kind: "open", isStream: false });
   const [posting, setPosting] = useState(false);
+  const [revokedMsg, setRevokedMsg] = useState("");
 
   const load = useCallback(async () => {
     const supabase = createClient();
     const { data: rows } = await supabase
       .from("live_rooms")
-      .select("id, title, topic, kind, host:profiles!live_rooms_host_id_fkey(username, display_name)")
+      .select("id, title, topic, kind, is_stream, host:profiles!live_rooms_host_id_fkey(username, display_name)")
       .eq("is_live", true)
       .order("created_at", { ascending: false });
     if (!rows) { setLoading(false); return; }
@@ -46,12 +47,21 @@ export default function IgnitePage() {
 
   async function createRoom() {
     if (!form.title.trim() || posting) return;
+    setRevokedMsg("");
     setPosting(true);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setPosting(false); return; }
+    if (form.isStream) {
+      const { data: prof } = await supabase.from("profiles").select("livestream_revoked").eq("id", user.id).single();
+      if (prof?.livestream_revoked) {
+        setRevokedMsg("Your livestream access has been revoked after a report. Contact jointhinkr@gmail.com to appeal.");
+        setPosting(false);
+        return;
+      }
+    }
     const { data, error } = await supabase.from("live_rooms")
-      .insert({ title: form.title.trim(), topic: form.topic.trim() || null, kind: form.kind, host_id: user.id })
+      .insert({ title: form.title.trim(), topic: form.topic.trim() || null, kind: form.kind, host_id: user.id, is_stream: form.isStream })
       .select("id").single();
     if (!error && data) {
       await supabase.from("room_participants").insert({ room_id: data.id, user_id: user.id });
@@ -97,11 +107,21 @@ export default function IgnitePage() {
               </button>
             ))}
           </div>
+          <label className="flex items-center gap-2 cursor-pointer pt-1">
+            <input type="checkbox" checked={form.isStream} onChange={(e) => setForm((f) => ({ ...f, isStream: e.target.checked }))} className="accent-orange-600 w-4 h-4" />
+            <span className="text-sm" style={{ color: "var(--ink-1)" }}>📹 Stream my camera (live video)</span>
+          </label>
+          {form.isStream && (
+            <p className="text-xs" style={{ color: "var(--ink-40)", lineHeight: 1.45 }}>
+              Your screen and chat are moderated. Any report ends your stream and revokes your livestream access.
+            </p>
+          )}
+          {revokedMsg && <p className="text-xs" style={{ color: "#dc2626" }}>{revokedMsg}</p>}
           <div className="flex justify-end">
             <button onClick={createRoom} disabled={posting || !form.title.trim()}
               className="px-4 py-2 rounded-full text-white text-sm font-semibold disabled:opacity-40"
               style={{ background: "linear-gradient(135deg, var(--flame), var(--flame-deep))" }}>
-              {posting ? "starting…" : "go live"}
+              {posting ? "starting…" : form.isStream ? "go live (camera)" : "go live"}
             </button>
           </div>
         </div>
@@ -122,10 +142,17 @@ export default function IgnitePage() {
             <Link key={r.id} href={`/ignite/${r.id}`} className="block rounded-2xl p-4"
               style={{ background: "var(--paper)", border: `1px solid ${k.color}33`, boxShadow: "var(--shadow-sm)" }}>
               <div className="flex items-center justify-between mb-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label" style={{ fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", background: `${k.color}1a`, color: k.color }}>
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: k.color, animation: "pulse-dot 1.2s infinite" }} />
-                  {k.label}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label" style={{ fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", background: `${k.color}1a`, color: k.color }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: k.color, animation: "pulse-dot 1.2s infinite" }} />
+                    {k.label}
+                  </span>
+                  {r.is_stream && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full font-label" style={{ fontSize: "9px", letterSpacing: "0.08em", background: "rgba(244,74,38,0.12)", color: "var(--flame)" }}>
+                      📹 VIDEO
+                    </span>
+                  )}
+                </div>
                 <span className="font-label" style={{ fontSize: "10px", color: "var(--ink-40)" }}>{r.count} in room</span>
               </div>
               <div className="font-display text-[17px] leading-snug" style={{ color: "var(--ink-1)" }}>{r.title}</div>

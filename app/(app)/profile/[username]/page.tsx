@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import ThoughtCard from "@/components/thought-card";
 import Avatar from "@/components/avatar";
+import ProfileActions from "@/components/profile-actions";
 import { uploadToBucket } from "@/lib/upload";
 import type { Profile, ThoughtWithMeta } from "@/lib/types";
 
@@ -17,15 +18,29 @@ const AXIS_LABELS: Record<string, [string, string]> = {
   novelty_vs_depth: ["Novelty", "Depth"],
 };
 
+const BIO_MAX_WORDS = 80;
+const wordCount = (s: string) => (s.trim() ? s.trim().split(/\s+/).length : 0);
+function clampWords(s: string, max: number) {
+  const w = s.split(/\s+/);
+  if (w.length <= max) return s;
+  return w.slice(0, max).join(" ");
+}
+const normalizeUsername = (s: string) => s.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30);
+
 export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [thoughts, setThoughts] = useState<ThoughtWithMeta[]>([]);
+  const [tab, setTab] = useState<"posts" | "resonated">("posts");
+  const [resonatedThoughts, setResonatedThoughts] = useState<ThoughtWithMeta[] | null>(null);
+  const [loadingReson, setLoadingReson] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isMe, setIsMe] = useState(false);
+  const [meId, setMeId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ display_name: "", bio: "", city: "" });
+  const [editForm, setEditForm] = useState({ display_name: "", username: "", bio: "", city: "", allow_connection_requests: true, resonances_private: true });
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -64,11 +79,15 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
 
     if (!p) { setLoading(false); return; }
     setProfile(p);
+    setMeId(user?.id ?? null);
     setIsMe(user?.id === p.id);
     setEditForm({
       display_name: p.display_name ?? "",
+      username: p.username ?? "",
       bio: p.bio ?? "",
       city: p.city ?? "",
+      allow_connection_requests: p.allow_connection_requests ?? true,
+      resonances_private: p.resonances_private ?? true,
     });
 
     const { data: rows } = await supabase
@@ -91,12 +110,18 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       resonatedSet = new Set((res ?? []).map((r: { thought_id: string }) => r.thought_id));
     }
 
+    // Real branch counts (children whose parent_id points at each thought).
+    const { data: branches } = await supabase
+      .from("thoughts").select("parent_id").in("parent_id", rows.map((r) => r.id));
+    const bc: Record<string, number> = {};
+    (branches ?? []).forEach((b: { parent_id: string }) => { bc[b.parent_id] = (bc[b.parent_id] ?? 0) + 1; });
+
     setThoughts(
       rows.map((r) => ({
         ...r,
         author: r.author,
         resonated: resonatedSet.has(r.id),
-        branch_count: 0,
+        branch_count: bc[r.id] ?? 0,
       }))
     );
     setLoading(false);
@@ -104,23 +129,69 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
 
   useEffect(() => { load(); }, [load]);
 
+  // Reload when a thought is posted/edited/deleted via the global composer.
+  useEffect(() => {
+    const onPosted = () => load();
+    window.addEventListener("thinkr:posted", onPosted);
+    return () => window.removeEventListener("thinkr:posted", onPosted);
+  }, [load]);
+
+  const loadResonated = useCallback(async () => {
+    if (!profile) return;
+    setLoadingReson(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("resonances")
+      .select("created_at, thought:thoughts!resonances_thought_id_fkey(*, author:profiles!thoughts_author_id_fkey(id, username, display_name, avatar_url))")
+      .eq("user_id", profile.id)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    const rows = (data ?? []) as unknown as Array<{ thought: ThoughtWithMeta | null }>;
+    const list = rows
+      .map((r) => r.thought)
+      .filter((t): t is ThoughtWithMeta => !!t)
+      .map((t) => ({ ...t, resonated: true, branch_count: 0 }));
+    setResonatedThoughts(list);
+    setLoadingReson(false);
+  }, [profile]);
+
+  // Load resonated posts lazily when the tab is first opened (respecting privacy).
+  useEffect(() => {
+    if (tab === "resonated" && profile && resonatedThoughts === null && !(!isMe && profile.resonances_private)) {
+      loadResonated();
+    }
+  }, [tab, profile, isMe, resonatedThoughts, loadResonated]);
+
   async function saveProfile() {
     if (!profile) return;
+    setFormError("");
+    const uname = normalizeUsername(editForm.username);
+    if (uname.length < 3) { setFormError("Username must be at least 3 characters (letters, numbers, underscores)."); return; }
+    if (wordCount(editForm.bio) > BIO_MAX_WORDS) { setFormError(`Bio must be ${BIO_MAX_WORDS} words or fewer.`); return; }
     setSaving(true);
     const supabase = createClient();
     const { error } = await supabase
       .from("profiles")
       .update({
         display_name: editForm.display_name || null,
+        username: uname,
         bio: editForm.bio || null,
         city: editForm.city || null,
+        allow_connection_requests: editForm.allow_connection_requests,
+        resonances_private: editForm.resonances_private,
       })
       .eq("id", profile.id);
-    if (!error) {
-      setEditing(false);
+    setSaving(false);
+    if (error) {
+      setFormError(/duplicate|unique/i.test(error.message) ? "That username is already taken." : error.message);
+      return;
+    }
+    setEditing(false);
+    if (uname !== profile.username) {
+      router.replace(`/profile/${uname}`);
+    } else {
       load();
     }
-    setSaving(false);
   }
 
   if (loading) {
@@ -181,27 +252,55 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                 )}
               </div>
             ) : (
-              <div className="space-y-2 flex-1">
+              <div className="space-y-2.5 flex-1">
                 <input
                   value={editForm.display_name}
                   onChange={(e) => setEditForm((f) => ({ ...f, display_name: e.target.value }))}
                   placeholder="Display name"
                   className="w-full text-sm border-b border-black/15 pb-1 focus:outline-none bg-transparent"
                 />
+                <div className="flex items-center gap-1 border-b border-black/15 pb-1">
+                  <span className="text-sm opacity-40" style={{ fontFamily: "'Space Mono', monospace" }}>@</span>
+                  <input
+                    value={editForm.username}
+                    onChange={(e) => setEditForm((f) => ({ ...f, username: normalizeUsername(e.target.value) }))}
+                    placeholder="username"
+                    className="w-full text-sm focus:outline-none bg-transparent"
+                    style={{ fontFamily: "'Space Mono', monospace" }}
+                  />
+                </div>
                 <input
                   value={editForm.city}
                   onChange={(e) => setEditForm((f) => ({ ...f, city: e.target.value }))}
                   placeholder="City"
                   className="w-full text-sm border-b border-black/15 pb-1 focus:outline-none bg-transparent"
                 />
-                <textarea
-                  value={editForm.bio}
-                  onChange={(e) => setEditForm((f) => ({ ...f, bio: e.target.value }))}
-                  placeholder="Bio"
-                  maxLength={300}
-                  rows={2}
-                  className="w-full resize-none text-sm bg-transparent focus:outline-none placeholder:opacity-30"
-                />
+                <div>
+                  <textarea
+                    value={editForm.bio}
+                    onChange={(e) => setEditForm((f) => ({ ...f, bio: clampWords(e.target.value, BIO_MAX_WORDS) }))}
+                    placeholder="Bio — up to 80 words"
+                    rows={3}
+                    className="w-full resize-none text-sm bg-transparent focus:outline-none placeholder:opacity-30"
+                  />
+                  <div className="text-[11px]" style={{ color: wordCount(editForm.bio) >= BIO_MAX_WORDS ? "var(--flame)" : "var(--ink-40)" }}>
+                    {wordCount(editForm.bio)}/{BIO_MAX_WORDS} words
+                  </div>
+                </div>
+                <div className="font-label pt-1.5" style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-40)" }}>Activity &amp; privacy</div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={editForm.allow_connection_requests}
+                    onChange={(e) => setEditForm((f) => ({ ...f, allow_connection_requests: e.target.checked }))}
+                    className="accent-orange-600 w-4 h-4" />
+                  <span className="text-xs" style={{ color: "var(--ink-60)" }}>Allow others to send me connection requests</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={editForm.resonances_private}
+                    onChange={(e) => setEditForm((f) => ({ ...f, resonances_private: e.target.checked }))}
+                    className="accent-orange-600 w-4 h-4" />
+                  <span className="text-xs" style={{ color: "var(--ink-60)" }}>Keep my resonated posts private</span>
+                </label>
+                {formError && <p className="text-xs text-red-600">{formError}</p>}
               </div>
             )}
           </div>
@@ -230,13 +329,20 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
                   className="text-xs opacity-40 hover:opacity-70"
                   style={{ fontFamily: "'Space Mono', monospace" }}
                 >
-                  edit
+                  settings
                 </button>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {!isMe && meId && (
+        <ProfileActions
+          target={{ id: profile.id, username: profile.username, display_name: profile.display_name, allow_connection_requests: profile.allow_connection_requests }}
+          meId={meId}
+        />
+      )}
 
       {Object.keys(fp).length > 0 && (
         <div className="rounded-2xl bg-white border border-black/6 px-5 py-4 space-y-3">
@@ -268,17 +374,37 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       )}
 
       <div>
-        <div
-          className="text-xs tracking-widest opacity-40 mb-3"
-          style={{ fontFamily: "'Space Mono', monospace" }}
-        >
-          THOUGHTS
+        <div className="flex gap-2 mb-3">
+          {(["posts", "resonated"] as const).map((tb) => (
+            <button key={tb} onClick={() => setTab(tb)}
+              className="px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors"
+              style={tab === tb
+                ? { background: "var(--flame)", color: "#fff" }
+                : { background: "var(--paper)", color: "var(--ink-60)", border: "1px solid var(--line)" }}>
+              {tb === "posts" ? "Posts" : "Resonated"}
+            </button>
+          ))}
         </div>
-        {thoughts.length === 0 ? (
-          <div className="text-center py-8 opacity-30 text-sm">No thoughts yet.</div>
+
+        {tab === "posts" ? (
+          thoughts.length === 0 ? (
+            <div className="text-center py-8 opacity-30 text-sm">No thoughts yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {thoughts.map((t) => (
+                <ThoughtCard key={t.id} thought={t} canManage={isMe} onChanged={load} />
+              ))}
+            </div>
+          )
+        ) : !isMe && profile.resonances_private ? (
+          <div className="text-center py-8 opacity-40 text-sm">@{profile.username} keeps their resonated posts private.</div>
+        ) : loadingReson || resonatedThoughts === null ? (
+          <div className="h-24 rounded-2xl skeleton" />
+        ) : resonatedThoughts.length === 0 ? (
+          <div className="text-center py-8 opacity-30 text-sm">{isMe ? "You haven't resonated with anything yet." : "Nothing resonated yet."}</div>
         ) : (
           <div className="space-y-3">
-            {thoughts.map((t) => (
+            {resonatedThoughts.map((t) => (
               <ThoughtCard key={t.id} thought={t} />
             ))}
           </div>

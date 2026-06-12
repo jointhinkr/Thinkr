@@ -16,6 +16,42 @@ export type Profile = {
   state?: string | null;
   region?: string | null;
   thinking_type?: string | null;
+  // Authorized Beta Tester Exception (approved under-18 testers). See /terms.
+  beta_tester?: boolean | null;
+  // Privacy: when false, others cannot send this user connection requests.
+  allow_connection_requests?: boolean | null;
+  // Moderation: set by AI report assessment / manual review.
+  suspended?: boolean | null;
+  // When true (default), this user's resonated posts are hidden from others.
+  resonances_private?: boolean | null;
+  // Set when a livestream of theirs is reported; blocks going live again.
+  livestream_revoked?: boolean | null;
+};
+
+// One-directional follow. muser follows muse.
+export type Muse = {
+  muser_id: string;
+  muse_id: string;
+  created_at: string;
+};
+
+export type Block = {
+  blocker_id: string;
+  blocked_id: string;
+  created_at: string;
+};
+
+export type Report = {
+  id: string;
+  reporter_id: string;
+  reported_id: string;
+  thought_id: string | null;
+  reason: string;
+  status: "pending" | "reviewed" | "actioned" | "dismissed";
+  ai_severity: "none" | "low" | "medium" | "high" | "severe" | null;
+  ai_action: "none" | "flag" | "suspend" | null;
+  ai_rationale: string | null;
+  created_at: string;
 };
 
 // Private matching preferences (own-row RLS — never shown publicly).

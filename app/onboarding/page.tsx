@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isValidBetaCode } from "@/lib/beta";
 import type { Fingerprint } from "@/lib/types";
 
 const STATES = ["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming"];
@@ -34,6 +35,8 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [age, setAge] = useState<number | null>(null);
+  const [betaChecked, setBetaChecked] = useState(false);
+  const [betaCode, setBetaCode] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const [matchGenders, setMatchGenders] = useState<string[]>([]);
   const [matchAge, setMatchAge] = useState<string | null>(null);
@@ -82,8 +85,12 @@ export default function OnboardingPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push("/login"); return; }
 
+    const isMinor = age != null && age < 18;
+    const stateVal = stateUS === "undisclosed" ? null : stateUS;
+    const regionVal = region === "undisclosed" ? null : region;
     await supabase.from("profiles").update({
-      fingerprint, age, gender, state: stateUS, region, city: stateUS, thinking_type: typeName,
+      fingerprint, age, gender, state: stateVal, region: regionVal, city: stateVal, thinking_type: typeName,
+      ...(isMinor ? { beta_tester: true } : {}),
     }).eq("id", user.id);
     await supabase.from("match_prefs").upsert({
       user_id: user.id,
@@ -112,7 +119,7 @@ export default function OnboardingPage() {
 
         <div className="rounded-[22px] px-6 py-7 animate-rise" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
           {key === "intro" && <Intro onStart={() => go(1)} />}
-          {key === "you" && <YouStep {...{ age, setAge, gender, setGender }} onBack={() => go(-1)} onNext={() => go(1)} />}
+          {key === "you" && <YouStep {...{ age, setAge, gender, setGender, betaChecked, setBetaChecked, betaCode, setBetaCode }} onBack={() => go(-1)} onNext={() => go(1)} />}
           {key === "prefGender" && <PrefGender {...{ matchGenders, setMatchGenders }} onBack={() => go(-1)} onNext={() => go(1)} />}
           {key === "prefAge" && <PrefAge {...{ age, matchAge, setMatchAge }} onBack={() => go(-1)} onNext={() => go(1)} />}
           {key === "location" && <LocationStep {...{ stateUS, setStateUS, region, setRegion, localTwin, setLocalTwin }} onBack={() => go(-1)} onNext={() => go(1)} />}
@@ -184,22 +191,41 @@ function Intro({ onStart }: { onStart: () => void }) {
   );
 }
 
-function YouStep({ age, setAge, gender, setGender, onBack, onNext }: { age: number | null; setAge: (n: number | null) => void; gender: string | null; setGender: (s: string) => void; onBack: () => void; onNext: () => void }) {
+function YouStep({ age, setAge, gender, setGender, betaChecked, setBetaChecked, betaCode, setBetaCode, onBack, onNext }: { age: number | null; setAge: (n: number | null) => void; gender: string | null; setGender: (s: string) => void; betaChecked: boolean; setBetaChecked: (b: boolean) => void; betaCode: string; setBetaCode: (s: string) => void; onBack: () => void; onNext: () => void }) {
   const minor = age != null && age < 18;
+  const codeValid = isValidBetaCode(betaCode);
+  // Under-18s may only be here as authorized beta testers — re-confirm the code.
+  const betaOk = !minor || (betaChecked && codeValid);
   return (
     <div>
       <Eyebrow>A little about you</Eyebrow>
       <h2 className={h2} style={{ fontWeight: 600 }}>First, the basics.</h2>
       <label className="block font-semibold text-[15px] mt-5">How old are you?</label>
       <input type="number" min={13} max={120} placeholder="e.g. 21" value={age ?? ""} onChange={(e) => setAge(e.target.value ? parseInt(e.target.value, 10) : null)} style={fldStyle} />
-      {minor && <Note><b>Heads up:</b> under-18s are only ever matched with other under-18s — never with adults. You can take the quiz now.</Note>}
+      {minor && (
+        <div className="mt-4 rounded-xl p-4" style={{ background: "#FFF6EC", border: "1px solid var(--amber)" }}>
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={betaChecked} onChange={(e) => setBetaChecked(e.target.checked)} className="mt-0.5 accent-orange-600 w-4 h-4" />
+            <span className="text-[13.5px]" style={{ color: "var(--ink-1)", lineHeight: 1.5 }}>
+              I&apos;m an authorized Thinkr beta tester under 18 with an official access code. I understand I&apos;ll only ever
+              be matched with other under-18 testers.
+            </span>
+          </label>
+          <label className="block font-semibold text-[13px] mt-3 mb-1.5" style={{ color: "var(--ink-1)" }}>Re-enter your beta access code</label>
+          <input type="text" value={betaCode} onChange={(e) => setBetaCode(e.target.value)} autoComplete="off" placeholder="BETA-XXX-XXXX-XXXXXX" disabled={!betaChecked}
+            className="w-full rounded-xl px-4 py-2.5 text-[15px] tracking-wider disabled:opacity-50"
+            style={{ background: "#fff", border: `1.5px solid ${betaCode && !codeValid ? "#dc2626" : "var(--line)"}`, color: "var(--ink-1)" }} />
+          {betaCode.length > 0 && !codeValid && <p className="text-[12px] mt-1.5" style={{ color: "#dc2626" }}>That code isn&apos;t valid.</p>}
+          {betaOk && minor && <p className="text-[12px] mt-1.5" style={{ color: "var(--flame)", fontWeight: 600 }}>✓ Verified — you&apos;ll match only with other under-18 testers.</p>}
+        </div>
+      )}
       <label className="block font-semibold text-[15px] mt-5 mb-2">Your gender</label>
       <div className="flex flex-col gap-2.5">
         {[["female", "Female"], ["male", "Male"], ["nonid", "Prefer not to identify"]].map(([v, l]) => (
           <Choice key={v} round selected={gender === v} onClick={() => setGender(v)}>{l}</Choice>
         ))}
       </div>
-      <Nav onBack={onBack} onNext={onNext} disabled={!(age && age >= 13 && gender)} />
+      <Nav onBack={onBack} onNext={onNext} disabled={!(age && age >= 13 && gender && betaOk)} />
     </div>
   );
 }
@@ -229,7 +255,9 @@ function PrefGender({ matchGenders, setMatchGenders, onBack, onNext }: { matchGe
 
 function PrefAge({ age, matchAge, setMatchAge, onBack, onNext }: { age: number | null; matchAge: string | null; setMatchAge: (s: string) => void; onBack: () => void; onNext: () => void }) {
   const minor = age != null && age < 18;
-  const opts = minor ? [["teen", "Other teens (13–17)"]] : [["18-22", "18–22"], ["23-29", "23–29"], ["30s", "30s"], ["40+", "40+"], ["anyadult", "Any adult age (18+)"]];
+  const opts = minor
+    ? [["teen_same", "Someone the same age as me"], ["teen_under18", "Anyone under 18"]]
+    : [["same", "Around my age (±2 years)"], ["within5", "Within 5 years of me"], ["18-22", "18–22"], ["23-29", "23–29"], ["30s", "30s"], ["40+", "40+"], ["anyadult", "Any age (18+)"]];
   return (
     <div>
       <Eyebrow>Who you&apos;d like to meet</Eyebrow>
@@ -237,34 +265,51 @@ function PrefAge({ age, matchAge, setMatchAge, onBack, onNext }: { age: number |
       <div className="flex flex-col gap-2.5 mt-5">
         {opts.map(([v, l]) => <Choice key={v} round selected={matchAge === v} onClick={() => setMatchAge(v)}>{l}</Choice>)}
       </div>
-      <Note>For everyone&apos;s safety, matching never crosses the 18 line. {minor ? "As a teen, you'll only ever meet other teens." : "“Any age” means any adult — adults are never matched with minors."}</Note>
+      <Note>For everyone&apos;s safety, matching never crosses the 18 line. {minor ? "As an under-18 beta tester, you'll only ever be matched with other under-18 testers." : "“Any age” means any adult — adults are never matched with minors."}</Note>
       <Nav onBack={onBack} onNext={onNext} disabled={!matchAge} />
     </div>
   );
 }
 
 function LocationStep({ stateUS, setStateUS, region, setRegion, localTwin, setLocalTwin, onBack, onNext }: { stateUS: string | null; setStateUS: (s: string) => void; region: string | null; setRegion: (s: string) => void; localTwin: boolean | null; setLocalTwin: (b: boolean) => void; onBack: () => void; onNext: () => void }) {
+  const undisclosed = stateUS === "undisclosed";
+  function toggleUndisclosed() {
+    if (undisclosed) { setStateUS(""); setRegion(""); }
+    else { setStateUS("undisclosed"); setRegion("undisclosed"); setLocalTwin(false); }
+  }
   return (
     <div>
       <Eyebrow>Where you are</Eyebrow>
       <h2 className={h2} style={{ fontWeight: 600 }}>Your location</h2>
-      <p className="mt-2 text-[15px]" style={{ color: "var(--ink-60)" }}>We use this only to offer local matches if you want them.</p>
-      <label className="block font-semibold text-[15px] mt-4">State</label>
-      <select value={stateUS ?? ""} onChange={(e) => setStateUS(e.target.value)} style={fldStyle}>
-        <option value="">Choose a state…</option>
-        {STATES.map((s) => <option key={s}>{s}</option>)}
-      </select>
-      <label className="block font-semibold text-[15px] mt-4">Region of your state</label>
-      <select value={region ?? ""} onChange={(e) => setRegion(e.target.value)} style={fldStyle}>
-        {["", "Northern", "Southern", "Eastern", "Western", "Central", "Major city / metro"].map((r) => <option key={r} value={r}>{r || "Choose a region…"}</option>)}
-      </select>
-      <label className="block font-semibold text-[15px] mt-4 mb-2">Want a local Thought Twin?</label>
-      <div className="flex flex-col gap-2.5">
-        {[[true, "Yes — prioritise people near me"], [false, "No — match me with the best mind anywhere"]].map(([v, l]) => (
-          <Choice key={String(v)} round selected={localTwin === v} onClick={() => setLocalTwin(v as boolean)}>{l as string}</Choice>
-        ))}
+      <p className="mt-2 text-[15px]" style={{ color: "var(--ink-60)" }}>We use this only to offer local matches if you want them — and you can keep it private.</p>
+
+      <div className="mt-4">
+        <Choice round selected={undisclosed} onClick={toggleUndisclosed}>Prefer not to disclose my location</Choice>
       </div>
-      <Nav onBack={onBack} onNext={onNext} disabled={!(stateUS && region && localTwin !== null)} />
+
+      {!undisclosed ? (
+        <>
+          <label className="block font-semibold text-[15px] mt-4">State</label>
+          <select value={stateUS ?? ""} onChange={(e) => setStateUS(e.target.value)} style={fldStyle}>
+            <option value="">Choose a state…</option>
+            {STATES.map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <label className="block font-semibold text-[15px] mt-4">Region of your state</label>
+          <select value={region ?? ""} onChange={(e) => setRegion(e.target.value)} style={fldStyle}>
+            {["", "Northern", "Southern", "Eastern", "Western", "Central", "Major city / metro"].map((r) => <option key={r} value={r}>{r || "Choose a region…"}</option>)}
+          </select>
+          <label className="block font-semibold text-[15px] mt-4 mb-2">Want a local Thought Twin?</label>
+          <div className="flex flex-col gap-2.5">
+            {[[true, "Yes — prioritise people near me"], [false, "No — match me with the best mind anywhere"]].map(([v, l]) => (
+              <Choice key={String(v)} round selected={localTwin === v} onClick={() => setLocalTwin(v as boolean)}>{l as string}</Choice>
+            ))}
+          </div>
+        </>
+      ) : (
+        <Note>Your location stays private. We&apos;ll match you on how you think — anywhere. Local matching is off.</Note>
+      )}
+
+      <Nav onBack={onBack} onNext={onNext} disabled={undisclosed ? false : !(stateUS && region && localTwin !== null)} />
     </div>
   );
 }

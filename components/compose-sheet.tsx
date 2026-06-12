@@ -20,6 +20,7 @@ export default function ComposeSheet() {
   const [posting, setPosting] = useState(false);
   const [prompt, setPrompt] = useState(PROMPTS[0]);
   const [parent, setParent] = useState<{ id: string; body: string } | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [media, setMedia] = useState<{ url: string; type: "image" | "video" } | null>(null);
   const [uploading, setUploading] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -41,14 +42,26 @@ export default function ComposeSheet() {
   useEffect(() => {
     function onOpen(e: Event) {
       const detail = (e as CustomEvent).detail;
-      if (detail?.parentId) {
-        setParent({ id: detail.parentId, body: detail.parentBody || "" });
-        setPrompt("Where does this thought take you?");
-      } else {
+      if (detail?.editId) {
+        // Editing an existing thought.
+        setEditId(detail.editId);
         setParent(null);
+        setBody(detail.editBody || "");
+        setMedia(detail.editMediaUrl ? { url: detail.editMediaUrl, type: detail.editMediaType || "image" } : null);
+        setPrompt("Edit your thought");
+      } else if (detail?.parentId) {
+        setEditId(null);
+        setParent({ id: detail.parentId, body: detail.parentBody || "" });
+        setBody("");
+        setPrompt("Where does this thought take you?");
+        setMedia(null);
+      } else {
+        setEditId(null);
+        setParent(null);
+        setBody("");
         setPrompt(PROMPTS[Math.floor(Math.random() * PROMPTS.length)]);
+        setMedia(null);
       }
-      setMedia(null);
       setOpen(true);
     }
     window.addEventListener("thinkr:compose", onOpen);
@@ -72,17 +85,27 @@ export default function ComposeSheet() {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setPosting(false); return; }
-    const { error } = await supabase.from("thoughts").insert({
-      author_id: user.id,
-      body: body.trim(),
-      parent_id: parent?.id ?? null,
-      media_url: media?.url ?? null,
-      media_type: media?.type ?? null,
-    });
+    let error;
+    if (editId) {
+      ({ error } = await supabase.from("thoughts").update({
+        body: body.trim(),
+        media_url: media?.url ?? null,
+        media_type: media?.type ?? null,
+      }).eq("id", editId).eq("author_id", user.id));
+    } else {
+      ({ error } = await supabase.from("thoughts").insert({
+        author_id: user.id,
+        body: body.trim(),
+        parent_id: parent?.id ?? null,
+        media_url: media?.url ?? null,
+        media_type: media?.type ?? null,
+      }));
+    }
     setPosting(false);
     if (!error) {
       setBody("");
       setParent(null);
+      setEditId(null);
       setMedia(null);
       setOpen(false);
       window.dispatchEvent(new CustomEvent("thinkr:posted"));
@@ -112,7 +135,7 @@ export default function ComposeSheet() {
         <div className="mx-auto mb-4 h-1 w-10 rounded-full" style={{ background: "var(--ink-12)" }} />
 
         <div className="flex items-center justify-between mb-3">
-          <span className="label-xs">{parent ? "Branching a thought" : "New thought"}</span>
+          <span className="label-xs">{editId ? "Edit thought" : parent ? "Branching a thought" : "New thought"}</span>
           <span className="label-xs" style={{ color: body.length > MAX * 0.9 ? "var(--flame)" : undefined }}>
             {body.length}/{MAX}
           </span>
@@ -167,7 +190,7 @@ export default function ComposeSheet() {
             className="px-5 py-2.5 rounded-full text-white text-sm font-semibold transition-all active:scale-95 disabled:opacity-40"
             style={{ background: "linear-gradient(135deg, var(--flame), var(--flame-deep))", boxShadow: "var(--shadow-flame)" }}
           >
-            {posting ? "Posting…" : "Post thought"}
+            {posting ? (editId ? "Saving…" : "Posting…") : editId ? "Save changes" : "Post thought"}
           </button>
         </div>
       </div>

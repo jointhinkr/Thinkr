@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef, use } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { detectContactInfo, contactWarning, SAFETY_RULE } from "@/lib/safety";
+import LivestreamStage from "@/components/livestream-stage";
 
 const KIND_COLOR: Record<string, string> = { debate: "#F44A26", study: "#C9821E", chill: "#B6791B", open: "#E5604B" };
 
@@ -12,13 +13,14 @@ type RMsg = { id: string; sender_id: string; body: string; created_at: string };
 export default function RoomPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [room, setRoom] = useState<{ title: string; topic: string | null; kind: string } | null>(null);
+  const [room, setRoom] = useState<{ title: string; topic: string | null; kind: string; host_id: string; is_stream: boolean } | null>(null);
   const [messages, setMessages] = useState<RMsg[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [count, setCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
+  const [safetyWarn, setSafetyWarn] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
       if (!user) { router.push("/login"); return; }
       setUserId(user.id);
 
-      const { data: r } = await supabase.from("live_rooms").select("title, topic, kind").eq("id", id).single();
+      const { data: r } = await supabase.from("live_rooms").select("title, topic, kind, host_id, is_stream").eq("id", id).single();
       if (!r) { router.push("/ignite"); return; }
       if (active) setRoom(r);
 
@@ -76,6 +78,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
   async function send() {
     if (!body.trim()) return;
+    const check = detectContactInfo(body);
+    if (check.blocked) { setSafetyWarn(contactWarning(check.kind)); return; }
+    setSafetyWarn("");
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -108,6 +113,12 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         <button onClick={leave} className="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold" style={{ border: "1.5px solid var(--line-2)", color: "var(--ink-60)" }}>Leave</button>
       </div>
 
+      {room?.is_stream && (
+        <div className="mt-3">
+          <LivestreamStage roomId={id} hostId={room.host_id} meId={userId} hostName={names[room.host_id] || "Host"} />
+        </div>
+      )}
+
       {room?.topic && (
         <div className="mt-3 rounded-2xl px-4 py-3 font-display italic text-[15px]" style={{ background: `${color}12`, border: `1px solid ${color}33`, color: "var(--ink-1)" }}>
           “{room.topic}”
@@ -115,6 +126,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
       )}
 
       <div className="py-4 space-y-3" style={{ paddingBottom: "96px" }}>
+        <div className="flex items-start gap-2 rounded-xl px-3 py-2 text-[11px]" style={{ background: "#FFF6EC", border: "1px solid var(--amber)", color: "var(--ink-60)", lineHeight: 1.4 }}>
+          <span>🛡️</span><span>{SAFETY_RULE}</span>
+        </div>
         {loading && <div className="h-10 w-2/3 rounded-2xl skeleton" />}
         {!loading && messages.length === 0 && (
           <div className="text-center py-8"><p className="font-display italic text-lg" style={{ color: "var(--ink-60)" }}>The floor is yours. Say something.</p></div>
@@ -143,9 +157,14 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         <div ref={bottomRef} />
       </div>
 
-      <div className="fixed inset-x-0 z-40 flex justify-center px-4" style={{ bottom: "calc(var(--nav-h) + 6px)" }}>
+      <div className="fixed inset-x-0 z-40 flex flex-col items-center px-4" style={{ bottom: "calc(var(--nav-h) + 6px)" }}>
+        {safetyWarn && (
+          <div className="w-full max-w-[560px] mb-2 rounded-xl px-3.5 py-2.5 text-xs" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", lineHeight: 1.45 }}>
+            {safetyWarn}
+          </div>
+        )}
         <div className="w-full max-w-[560px] flex items-end gap-2 p-1.5 rounded-[24px] glass" style={{ border: "1px solid var(--line-2)", boxShadow: "var(--shadow-lg)" }}>
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          <textarea value={body} onChange={(e) => { setBody(e.target.value); if (safetyWarn) setSafetyWarn(""); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
             rows={1} maxLength={2000} placeholder="Say it to the room…" className="flex-1 resize-none bg-transparent focus:outline-none text-sm px-3 py-2 max-h-28" style={{ color: "var(--ink-1)" }} />
           <button onClick={send} disabled={!body.trim()} aria-label="Send"
             className="w-10 h-10 rounded-full grid place-items-center text-white shrink-0 active:scale-90 disabled:opacity-40"

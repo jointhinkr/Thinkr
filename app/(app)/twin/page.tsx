@@ -23,9 +23,16 @@ const STEPS = [
   "Surfacing the mind closest to yours…",
 ];
 
-function ageBounds(tag: string): [number, number] {
+function ageBounds(tag: string, myAge?: number | null): [number, number] {
   switch (tag) {
-    case "teen": return [13, 17];
+    case "teen":            // legacy value
+    case "teen_under18": return [13, 17];
+    case "teen_same":
+      return typeof myAge === "number" ? [Math.max(13, myAge - 1), Math.min(17, myAge + 1)] : [13, 17];
+    case "same":     // adults: around my age
+      return typeof myAge === "number" ? [Math.max(18, myAge - 2), myAge + 2] : [18, 200];
+    case "within5":
+      return typeof myAge === "number" ? [Math.max(18, myAge - 5), myAge + 5] : [18, 200];
     case "18-22": return [18, 22];
     case "23-29": return [23, 29];
     case "30s": return [30, 39];
@@ -36,12 +43,13 @@ function ageBounds(tag: string): [number, number] {
 }
 function gateCandidates(me: Profile, candidates: Profile[], prefs: MatchPrefs | null): Profile[] {
   return candidates.filter((c) => {
+    // Hard rule: matching never crosses the 18 line, regardless of preferences.
     if (typeof me.age === "number" && typeof c.age === "number" && (me.age < 18) !== (c.age < 18)) return false;
     if (prefs) {
       const mg = prefs.match_genders ?? [];
       if (mg.length && !mg.includes("any") && c.gender && !mg.includes(c.gender)) return false;
       if (prefs.match_age && typeof c.age === "number") {
-        const [lo, hi] = ageBounds(prefs.match_age);
+        const [lo, hi] = ageBounds(prefs.match_age, me.age);
         if (c.age < lo || c.age > hi) return false;
       }
     }
@@ -84,7 +92,9 @@ export default function TwinPage() {
       const { data: prefs } = await supabase.from("match_prefs").select().eq("user_id", user.id).maybeSingle();
       prefsRef.current = (prefs as MatchPrefs | null) ?? null;
       const { data: allProfiles } = await supabase.from("profiles").select().neq("id", user.id);
-      candidatesRef.current = (allProfiles as Profile[]) ?? [];
+      const { data: blk } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", user.id);
+      const blocked = new Set((blk ?? []).map((b: { blocked_id: string }) => b.blocked_id));
+      candidatesRef.current = ((allProfiles as Profile[]) ?? []).filter((c) => !blocked.has(c.id) && !c.suspended);
 
       runMatch();
     })();

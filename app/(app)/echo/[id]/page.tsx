@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { detectContactInfo, contactWarning, SAFETY_RULE } from "@/lib/safety";
 import type { Profile } from "@/lib/types";
 
 type Msg = { id: string; sender_id: string; body: string; created_at: string };
@@ -20,6 +21,7 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [safetyWarn, setSafetyWarn] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback((smooth = true) => {
@@ -86,6 +88,9 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
 
   async function send() {
     if (!body.trim() || sending) return;
+    const check = detectContactInfo(body);
+    if (check.blocked) { setSafetyWarn(contactWarning(check.kind)); return; }
+    setSafetyWarn("");
     setSending(true);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -134,6 +139,9 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
 
       {/* messages */}
       <div className="py-4 space-y-2" style={{ paddingBottom: "96px" }}>
+        <div className="flex items-start gap-2 rounded-xl px-3 py-2 text-[11px]" style={{ background: "#FFF6EC", border: "1px solid var(--amber)", color: "var(--ink-60)", lineHeight: 1.4 }}>
+          <span>🛡️</span><span>{SAFETY_RULE}</span>
+        </div>
         {loading && <div className="h-10 w-2/3 rounded-2xl skeleton" />}
         {!loading && messages.length === 0 && (
           <div className="text-center py-10">
@@ -162,12 +170,17 @@ export default function ThreadPage({ params }: { params: Promise<{ id: string }>
       </div>
 
       {/* composer */}
-      <div className="fixed inset-x-0 z-40 flex justify-center px-4" style={{ bottom: "calc(var(--nav-h) + 6px)" }}>
+      <div className="fixed inset-x-0 z-40 flex flex-col items-center px-4" style={{ bottom: "calc(var(--nav-h) + 6px)" }}>
+        {safetyWarn && (
+          <div className="w-full max-w-[560px] mb-2 rounded-xl px-3.5 py-2.5 text-xs" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", lineHeight: 1.45 }}>
+            {safetyWarn}
+          </div>
+        )}
         <div className="w-full max-w-[560px] flex items-end gap-2 p-1.5 rounded-[24px] glass"
           style={{ border: "1px solid var(--line-2)", boxShadow: "var(--shadow-lg)" }}>
           <textarea
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={(e) => { setBody(e.target.value); if (safetyWarn) setSafetyWarn(""); }}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
             rows={1}
             maxLength={4000}

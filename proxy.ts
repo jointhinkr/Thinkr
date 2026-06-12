@@ -31,16 +31,42 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const publicPaths = ["/login", "/signup"];
-  const isPublic = publicPaths.some((p) => pathname.startsWith(p));
+  // Legal pages are open to everyone (signed in or not) and never redirect —
+  // users must be able to read the Terms/Privacy/Cookie policy they agree to.
+  const openPaths = ["/terms", "/privacy", "/cookies"];
+  if (openPaths.some((p) => pathname.startsWith(p))) {
+    return supabaseResponse;
+  }
 
-  if (!user && !isPublic) {
+  // Auth pages are for signed-out users only.
+  const authPaths = ["/login", "/signup"];
+  const isAuthPage = authPaths.some((p) => pathname.startsWith(p));
+
+  if (!user && !isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublic) {
+  // Suspended users are locked out of the app (kept reversible — not deleted).
+  if (user) {
+    const { data: me } = await supabase.from("profiles").select("suspended").eq("id", user.id).single();
+    if (me?.suspended) {
+      if (pathname !== "/suspended") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/suspended";
+        return NextResponse.redirect(url);
+      }
+      return supabaseResponse;
+    }
+    if (pathname === "/suspended") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/flux";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  if (user && isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/flux";
     return NextResponse.redirect(url);
